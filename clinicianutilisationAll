@@ -109,4 +109,9 @@ case
 | table pkey1 NumberOfCases
 ]
 | fillnull
+
 | table pkey1 OperationDate  WeekNumber WeekDay MonthNumber YearNumber Surgeon  NumberOfCases
+| eval OperationDateEpoch0=OperationDate." "."00:00:00"
+| eval OperationDateEpoch=strptime(OperationDateEpoch0,"%Y%m%d %H:%M")
+| eval _time = strptime(OperationDateEpoch0,"%Y%m%d %H:%M")
+| table _time pkey1  OperationDate OperationDateEpoch0  WeekNumber WeekDay MonthNumber YearNumber Surgeon  NumberOfCases
