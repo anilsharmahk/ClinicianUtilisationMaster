@@ -1,0 +1,22 @@
+index=meditech OperationDate > 20181231
+OperationRoom IN ( "DS 1A","THEATRE 1","THEATRE 2","THEATRE 5","THEATRE 7","THEATRE 6","THEATRE 3","DS 2A","THEATRE 8","MINOPSA","THEATRE 4","THEATRE HYB","MITU TH2","MITU TH1","MITU TR1")
+| sort 0 - _indextime     
+| eval indextime=strftime(_indextime,"%Y-%m-%d %H:%M:%S") 
+| dedup OperationDate Surgeon OperationRoom  AccountNumber UnitNumber PatientID Ps OpSeq  sortby -indextime 
+| eval pkey1=OperationDate.Surgeon
+| table _time pkey1 OperationDate Surgeon 
+| append
+[ search index=meditech_schedule sourcetype=meditech:ip:allocations   earliest=-1h@h Date>20190331 DrCode!="zzNULL"	
+| sort 0 - _indextime 
+| eval indextime=strftime(_indextime,"%Y-%m-%d %H:%M:%S")
+| dedup Date DrCode FromTime ToTime TheatreRoomCode  StartDate  EndDate sortby -indextime 
+| eval pkey1=Date.DrCode
+| table _time pkey1 Date DrCode
+]
+| fillnull
+| table pkey1 OperationDate Surgeon Date DrCode
+| eval OperationDate=if(OperationDate=0,Date,OperationDate)
+| eval Surgeon= if(Surgeon=0,DrCode,Surgeon)
+| table pkey1 OperationDate Surgeon Date DrCode 
+| dedup pkey1 OperationDate Surgeon
+| table  pkey1 OperationDate Surgeon | sort OperationDate -
