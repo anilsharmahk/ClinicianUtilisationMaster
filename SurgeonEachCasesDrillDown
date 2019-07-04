@@ -1,0 +1,114 @@
+index=meditech OperationDate > 20181231
+OperationRoom IN ( "DS 1A","THEATRE 1","THEATRE 2","THEATRE 5","THEATRE 7","THEATRE 6","THEATRE 3","DS 2A","THEATRE 8","MINOPSA","THEATRE 4","THEATRE HYB","MITU TH2","MITU TH1","MITU TR1")
+| sort 0 - _indextime     
+| eval indextime=strftime(_indextime,"%Y-%m-%d %H:%M:%S") 
+| dedup Surgeon OperationDate VisitID AccountNumber UnitNumber OperationRoom Ps sortby -indextime 
+| lookup clinician_lookup_updated_v1 Mnemonic AS Surgeon 
+ OUTPUT Speciality AS SpecialtyCode FirstName AS surgeonFirstName LastName AS surgeonLastName Title AS surgeonTitle
+
+| eval tnow = now() 
+| eval OperationDateEpoch0=OperationDate." "."00:00:00"
+| eval OperationDateEpoch=strptime(OperationDateEpoch0,"%Y%m%d %H:%M")
+| eval dayofweekasnumber=strftime(OperationDateEpoch,"%w")        
+| eval WeekDay = strftime(OperationDateEpoch,"%a")        
+| eval MonthNumber = strftime(OperationDateEpoch,"%m")         
+| eval reportrun=strftime(tnow,"%Y-%m-%d %H:%M")        
+| eval indextime=strftime(_indextime,"%Y-%m-%d %H:%M:%S") 
+
+| eval SurgeryStartDerived=coalesce(anaesthesiaBegin,surgeryBegin,patientArrival)
+        
+| eval SurgeryEndDerived =coalesce(outOfTheatre,anaesthesiaEnd,surgeryEnd,recoveryStart) 
+| eval         
+ Date=strftime(SurgeryStartDerived,"%Y%m%d")              
+,SurgeryStartTimeDerived=strftime(SurgeryStartDerived,"%A, %e %b %Y, %H:%M"), SurgeryEndTimeDerived=strftime(SurgeryEndDerived,"%A, %H:%M"),SurgeryDateDerived=Date."_".Surgeon,
+
+TotalSurgeryMinutesDerived0=round((SurgeryEndDerived-SurgeryStartDerived)/60,0),
+TotalSurgeryMinutesDerived=round((SurgeryEndDerived-SurgeryStartDerived)/60,0)     
+| search SurgeryEndDerived=*         
+
+| eval PkeyDateSurgeon = OperationDate.Surgeon        
+| eval SurgeonFullname =  surgeonTitle." ".surgeonFirstName." ".surgeonLastName     
+| eval TimePerProcedure =   TotalSurgeryMinutesDerived 
+| eval WeekNumber = strftime(OperationDateEpoch,"%V") | eval YearNumber = substr(date_year, 3, 2) 
+| eval WeekNumberYear= WeekNumber."--".YearNumber 
+| eval pkey2=PkeyDateSurgeon.OpID
+|eval SurgeryStartTimeInHM=strftime(SurgeryStartDerived,"%H:%M")
+| eval SurgeryEndTimeInHM=strftime(SurgeryEndDerived,"%H:%M")
+| table SurgeryStartTimeInHM SurgeryEndTimeInHM SurgeonFullname dayofweekasnumber  WeekDay _time WeekNumber WeekNumberYear YearNumber  OperationRoom date_year roomName PkeyDateSurgeon pkey2 SurgeryStartTimeInHM _time  OperationDate  TotalSurgeryMinutesDerived TimePerProcedure Surgeon AccountNumber SurgeryStartDerived SurgeryEndDerived
+
+| eval  GroupedTheatreNames = 
+case
+( OperationRoom ="DS 1A" OR OperationRoom ="MITU TH1","MITU TH1/DS 1A" ,
+  OperationRoom ="DS 2A" OR OperationRoom ="MITU TH2","MITU TH2/DS 2A" ,
+  OperationRoom ="MINOPSA" OR OperationRoom ="MITU TR1","MITU TR1/MINOPSA",
+  OperationRoom ="THEATRE 8" OR OperationRoom ="THEATRE HYB","THEATRE HYB/THEATRE 8",
+  
+  OperationRoom !="THEATRE 8" AND OperationRoom !="THEATRE HYB" 
+  AND OperationRoom !="DS 1A" AND OperationRoom !="MITU TH1"
+  AND OperationRoom !="DS 2A" AND OperationRoom !="MITU TH2"
+  AND OperationRoom !="MINOPSA" AND OperationRoom !="MITU TR1",OperationRoom
+   )
+| eval SurgeryType=if (OperationRoom IN("DS 1A","MITU TH1","DS 2A","MITU TH2","MINOPSA","MITU TR1"), "Day_surgery","Main_theatres")  
+
+| table  SurgeryStartTimeInHM SurgeryEndTimeInHM SurgeonFullname dayofweekasnumber _time WeekDay date_year pkey2 SurgeryStartTimeInHM WeekNumber WeekNumberYear YearNumber  OperationRoom 
+  roomName GroupedTheatreNames SurgeryType PkeyDateSurgeon _time  OperationDate  TotalSurgeryMinutesDerived TimePerProcedure Surgeon AccountNumber SurgeryStartDerived SurgeryEndDerived
+  
+  
+| eval totalworkingdays =  IF (WeekNumber IN("01","16","17","19","22","35") AND date_year=2019 , "5", IF (WeekNumber=52 AND date_year=2019, 4, 6))
+| eval WorkingMinutesTheatre = IF(GroupedTheatreNames IN("THEATRE 2","THEATRE 5","THEATRE 7")  AND date_year=2019 ,(totalworkingdays * 720), ((totalworkingdays * 720)-720))
+| eval dayofweekasnumber2=if(dayofweekasnumber=0,7,dayofweekasnumber)
+| eval WeekDayPivot=dayofweekasnumber2."_".WeekDay
+
+| eval DailyTheatreUtlisation% = round(((TimePerProcedure/720)*100),2) 
+| eval WeeklyTheatreUtlisation% = round(((TimePerProcedure/4320)*100),2) 
+| eval WeeklyTheatreUtlisationnew = round(((TimePerProcedure/WorkingMinutesTheatre)*100),2) 
+| eval WeeklyAllTheatreUtlisation = round(((TimePerProcedure/47520)*100),2) 
+| eval Summary_SurgeryType = if( SurgeryType="Day_surgery",(round(((TimePerProcedure/12960)*100),2)), (round(((TimePerProcedure/34560)*100),2)))
+| dedup pkey2 GroupedTheatreNames SurgeryStartTimeInHM 
+| where YearNumber !=" "    | fillnull    
+| eval SurgeonFullname = if(SurgeonFullname=0,Surgeon,SurgeonFullname)
+| table _time WeekNumber WeekDay OperationDate    YearNumber PkeyDateSurgeon pkey2  Surgeon SurgeonFullname GroupedTheatreNames  SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutesDerived  DailyTheatreUtlisation% AccountNumber  SurgeryStartDerived SurgeryEndDerived
+| search Surgeon IN(BHATS)
+| search OperationDate = 20190620
+| table _time WeekNumber WeekDay OperationDate   YearNumber PkeyDateSurgeon  Surgeon SurgeonFullname AccountNumber GroupedTheatreNames  SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutesDerived AccountNumber SurgeryStartDerived SurgeryEndDerived
+| sort OperationDate SurgeryStartTimeInHM SurgeryStartDerived
+| eval pkey1 =PkeyDateSurgeon
+
+| join type=left pkey1
+
+
+[ search 
+
+index=meditech_schedule  sourcetype=meditech:ip:allocations  Date>20190331   DrCode!="zzNULL"  DrCode IN(BHATS)
+| sort 0 - _indextime 
+| eval indextime=strftime(_indextime,"%Y-%m-%d %H:%M:%S") 
+| dedup Date DrCode FromTime ToTime sortby -indextime
+| eval A_start=strptime(Date.FromTime,"%Y%m%d%H%M"),
+      A_end=strptime(Date.ToTime,"%Y%m%d%H%M"),
+      Date_Surgeon=Date.DrCode, 
+      Surgeon=DrCode 
+| where A_start<now()  
+| table Date_Surgeon Surgeon Date A_start FromTime  A_end ToTime 
+| fillnull   A_start A_end FromTime ToTime 
+| stats min(A_start) as A_start  max(A_end) as A_end  by Date_Surgeon Surgeon Date
+| eval A_startHM=strftime(A_start,"%H:%M")
+| eval A_endtHM=strftime(A_end,"%H:%M")
+| table Date_Surgeon Surgeon Date A_start A_end  A_startHM A_endtHM
+| rename A_startHM as FromTime
+| rename A_endtHM as ToTime 
+| rename Date_Surgeon as pkey1 
+| rename FromTime as AllocationFromTime 
+| rename ToTime as AllocationToTime
+| eval TotalAllocatedMins=round((A_end-A_start)/60,0)
+| fillnull
+| search Date=20190620
+| table pkey1  Surgeon Date A_end A_start AllocationFromTime AllocationToTime TotalAllocatedMins
+]
+| table _time WeekNumber WeekDay OperationDate   YearNumber PkeyDateSurgeon  Surgeon SurgeonFullname AccountNumber GroupedTheatreNames  SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutesDerived AccountNumber AllocationFromTime AllocationToTime TotalAllocatedMins A_end A_start SurgeryStartDerived SurgeryEndDerived
+-----------------------------------------------------------------------------------------------------------------------------------------
+| eval ThMinutesWithInAllocation=if((SurgeryStartDerived>=A_start AND SurgeryEndDerived<=A_end),TotalSurgeryMinutesDerived,0)
+| eval ThMinutesBeforeAllocationStart=if((SurgeryStartDerived<A_start AND SurgeryEndDerived>A_end),round((if(SurgeryEndDerived>A_end,A_end,SurgeryEndDerived)-A_start)/60,0),0)
+| eval ThMinutesAfterAllocationEnd=if(((SurgeryStartDerived<A_end AND SurgeryStartDerived>=A_start) AND SurgeryEndDerived>A_end),round((A_end-SurgeryStartDerived)/60,0),0)
+
+| table _time OperationDate  WeekDay PkeyDateSurgeon  Surgeon SurgeonFullname AccountNumber GroupedTheatreNames 
+  SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutesDerived AllocationFromTime AllocationToTime TotalAllocatedMins ThMinutesWithInAllocation ThMinutesBeforeAllocationStart ThMinutesAfterAllocationEnd
