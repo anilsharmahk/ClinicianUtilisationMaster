@@ -68,18 +68,21 @@ case
 | where YearNumber !=" "    | fillnull    
 | eval SurgeonFullname = if(SurgeonFullname=0,Surgeon,SurgeonFullname)
 | table _time WeekNumber WeekDay OperationDate    YearNumber PkeyDateSurgeon pkey2  Surgeon SurgeonFullname GroupedTheatreNames  SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutesDerived  DailyTheatreUtlisation% AccountNumber  SurgeryStartDerived SurgeryEndDerived
-| search Surgeon IN(BHATS)
-| search OperationDate = 20190620
+| search Surgeon IN($Surgeon$)
+| search OperationDate = $OperationDate$ 
+
 | table _time WeekNumber WeekDay OperationDate   YearNumber PkeyDateSurgeon  Surgeon SurgeonFullname AccountNumber GroupedTheatreNames  SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutesDerived AccountNumber SurgeryStartDerived SurgeryEndDerived
 | sort OperationDate SurgeryStartTimeInHM SurgeryStartDerived
 | eval pkey1 =PkeyDateSurgeon
+
+
 
 | join type=left pkey1
 
 
 [ search 
 
-index=meditech_schedule  sourcetype=meditech:ip:allocations  Date>20190331   DrCode!="zzNULL"  DrCode IN(BHATS)
+index=meditech_schedule  sourcetype=meditech:ip:allocations  Date>20190331   DrCode!="zzNULL"  DrCode IN($Surgeon$)
 | sort 0 - _indextime 
 | eval indextime=strftime(_indextime,"%Y-%m-%d %H:%M:%S") 
 | dedup Date DrCode FromTime ToTime sortby -indextime
@@ -101,14 +104,20 @@ index=meditech_schedule  sourcetype=meditech:ip:allocations  Date>20190331   DrC
 | rename ToTime as AllocationToTime
 | eval TotalAllocatedMins=round((A_end-A_start)/60,0)
 | fillnull
-| search Date=20190620
+| search Date= $OperationDate$
 | table pkey1  Surgeon Date A_end A_start AllocationFromTime AllocationToTime TotalAllocatedMins
 ]
 | table _time WeekNumber WeekDay OperationDate   YearNumber PkeyDateSurgeon  Surgeon SurgeonFullname AccountNumber GroupedTheatreNames  SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutesDerived AccountNumber AllocationFromTime AllocationToTime TotalAllocatedMins A_end A_start SurgeryStartDerived SurgeryEndDerived
------------------------------------------------------------------------------------------------------------------------------------------
 | eval ThMinutesWithInAllocation=if((SurgeryStartDerived>=A_start AND SurgeryEndDerived<=A_end),TotalSurgeryMinutesDerived,0)
 | eval ThMinutesBeforeAllocationStart=if((SurgeryStartDerived<A_start AND SurgeryEndDerived>A_end),round((if(SurgeryEndDerived>A_end,A_end,SurgeryEndDerived)-A_start)/60,0),0)
 | eval ThMinutesAfterAllocationEnd=if(((SurgeryStartDerived<A_end AND SurgeryStartDerived>=A_start) AND SurgeryEndDerived>A_end),round((A_end-SurgeryStartDerived)/60,0),0)
 | eval PercentageOfAllocationUtilisation=round((ThMinutesWithInAllocation/TotalAllocatedMins)*100,0)
 | table _time OperationDate  WeekDay PkeyDateSurgeon  Surgeon SurgeonFullname AccountNumber GroupedTheatreNames 
-  SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutesDerived AllocationFromTime AllocationToTime TotalAllocatedMins ThMinutesWithInAllocation ThMinutesBeforeAllocationStart ThMinutesAfterAllocationEnd  PercentageOfAllocationUtilisation
+  SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutesDerived AllocationFromTime AllocationToTime  ThMinutesWithInAllocation ThMinutesBeforeAllocationStart ThMinutesAfterAllocationEnd
+  | fields - PkeyDateSurgeon  - Surgeon - _time
+  | rename SurgeryStartTimeInHM as SurgeryStartTime
+  | rename SurgeryEndTimeInHM as SurgeryEndTime
+  | rename TotalSurgeryMinutesDerived as TotalTheatreMin
+  | rename ThMinutesWithInAllocation as ThMinWithInAlloc
+  | rename ThMinutesBeforeAllocationStart as ThMinBeforeAllocStart
+  | rename ThMinutesAfterAllocationEnd as ThMinAfterAllocEnd
