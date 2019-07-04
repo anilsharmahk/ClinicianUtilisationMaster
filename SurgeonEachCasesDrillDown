@@ -109,6 +109,6 @@ index=meditech_schedule  sourcetype=meditech:ip:allocations  Date>20190331   DrC
 | eval ThMinutesWithInAllocation=if((SurgeryStartDerived>=A_start AND SurgeryEndDerived<=A_end),TotalSurgeryMinutesDerived,0)
 | eval ThMinutesBeforeAllocationStart=if((SurgeryStartDerived<A_start AND SurgeryEndDerived>A_end),round((if(SurgeryEndDerived>A_end,A_end,SurgeryEndDerived)-A_start)/60,0),0)
 | eval ThMinutesAfterAllocationEnd=if(((SurgeryStartDerived<A_end AND SurgeryStartDerived>=A_start) AND SurgeryEndDerived>A_end),round((A_end-SurgeryStartDerived)/60,0),0)
-
+| eval PercentageOfAllocationUtilisation=round((ThMinutesWithInAllocation/TotalAllocatedMins)*100,0)
 | table _time OperationDate  WeekDay PkeyDateSurgeon  Surgeon SurgeonFullname AccountNumber GroupedTheatreNames 
-  SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutesDerived AllocationFromTime AllocationToTime TotalAllocatedMins ThMinutesWithInAllocation ThMinutesBeforeAllocationStart ThMinutesAfterAllocationEnd
+  SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutesDerived AllocationFromTime AllocationToTime TotalAllocatedMins ThMinutesWithInAllocation ThMinutesBeforeAllocationStart ThMinutesAfterAllocationEnd  PercentageOfAllocationUtilisation
