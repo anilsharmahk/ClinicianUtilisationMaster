@@ -1,0 +1,14 @@
+index=meditech OperationDate > 20181231 
+
+OperationRoom IN ( "DS 1A","THEATRE 1","THEATRE 2","THEATRE 5","THEATRE 7","THEATRE 6","THEATRE 3","DS 2A","THEATRE 8","MINOPSA","THEATRE 4","THEATRE HYB","MITU TH2","MITU TH1","MITU TR1")
+| eval indextime=strftime(_indextime,"%Y-%m-%d %H:%M:%S") 
+| dedup Surgeon OperationDate VisitID AccountNumber UnitNumber OperationRoom ActualOp sortby -indextime 
+| table Surgeon OperationDate VisitID AccountNumber UnitNumber OperationRoom ActualOp
+| join type=left Surgeon
+[search 
+sourcetype=ipeople:dbx:mis:drs 
+| table Mnemonic FirstName LastName  Name Service Specialty 
+| dedup Mnemonic FirstName LastName  Name Service Specialty | sort Mnemonic
+| rename Mnemonic as Surgeon
+]
+| table  Surgeon OperationDate VisitID AccountNumber UnitNumber OperationRoom ActualOp FirstName LastName  Name Service Specialty
