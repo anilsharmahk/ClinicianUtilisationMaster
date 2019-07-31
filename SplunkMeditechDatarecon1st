@@ -1,0 +1,32 @@
+index=meditech  OperationDate > 20181231 
+
+OperationRoom IN ( "DS 1A","THEATRE 1","THEATRE 2","THEATRE 5","THEATRE 7","THEATRE 6","THEATRE 3","DS 2A","THEATRE 8","MINOPSA",
+                    "THEATRE 4", "THEATRE HYB","MITU TH2","MITU TH1","MITU TR1"
+                    )
+| eval indextime=strftime(_indextime,"%Y-%m-%d %H:%M:%S") 
+| sort 0 - _indextime 
+| dedup  OperationDate OperationRoom  AccountNumber  patientArrival  sortby -indextime 
+
+| table indextime _time OperationDate Surgeon OperationRoom  AccountNumber anaesthesiaBegin surgeryBegin patientArrival  Time1 Time1Date Time2 Time2Date Time3 Time3Date Time4 Time4Date Time5 Time5Date Time6 Time6Date Time7 Time7Date Time8 Time8Date Time9 Time9Date Time10 Time10Date outOfTheatre anaesthesiaEnd surgeryEnd recoveryStart ActualOp
+
+| eval SurgeryStartDerived=coalesce(anaesthesiaBegin,surgeryBegin,patientArrival)
+| eval SurgeryEndDerived = coalesce(outOfTheatre,anaesthesiaEnd,surgeryEnd,recoveryStart)     
+ 
+
+| table indextime _time OperationDate Surgeon OperationRoom  AccountNumber  Time1 Time1Date Time2 Time2Date Time3 Time3Date Time4 Time4Date Time5 
+        Time5Date Time6 Time6Date Time7 Time7Date Time8 Time8Date Time9 Time9Date Time10 Time10Date SurgeryStartDerived SurgeryEndDerived SurgeryStartTimeInHM 
+        SurgeryEndTimeInHM ActualOp 
+        
+
+
+| stats latest(SurgeryStartDerived) as SurgeryStartDerived    latest(SurgeryEndDerived) as SurgeryEndDerived   by OperationDate Surgeon OperationRoom  AccountNumber  ActualOp indextime _time
+| table  OperationDate Surgeon OperationRoom  AccountNumber  ActualOp indextime _time SurgeryStartDerived  SurgeryEndDerived
+| eval SurgeryStartTimeInHM=strftime(SurgeryStartDerived,"%H:%M")
+| eval SurgeryEndTimeInHM=strftime(SurgeryEndDerived,"%H:%M")
+| eval TotalSurgeryMinutes=round((SurgeryEndDerived-SurgeryStartDerived)/60,0)  
+
+| dedup OperationDate Surgeon OperationRoom  AccountNumber SurgeryStartTimeInHM SurgeryEndTimeInHM  sortby -indextime 
+| dedup OperationDate Surgeon OperationRoom  AccountNumber SurgeryStartTimeInHM sortby -indextime 
+| dedup OperationDate Surgeon OperationRoom  AccountNumber SurgeryEndTimeInHM  sortby -indextime
+| table indextime _time OperationDate Surgeon OperationRoom  AccountNumber ActualOp SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutes
+| search TotalSurgeryMinutes >0
