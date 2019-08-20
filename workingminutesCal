@@ -1,0 +1,120 @@
+index=meditech  OperationDate > 20181231 
+OperationRoom IN ( "DS 1A","THEATRE 1","THEATRE 2","THEATRE 5","THEATRE 7","THEATRE 6","THEATRE 3","DS 2A","THEATRE 8","MINOPSA",
+                    "THEATRE 4", "THEATRE HYB","MITU TH2","MITU TH1","MITU TR1"
+                    )                    
+| eval indextime=strftime(_indextime,"%Y-%m-%d %H:%M:%S") 
+| sort 0 - _indextime 
+| dedup  OperationDate OperationRoom  AccountNumber  patientArrival  sortby -indextime
+
+| table indextime _time OperationDate Surgeon OperationRoom  AccountNumber anaesthesiaBegin surgeryBegin patientArrival  Time1 Time1Date Time2 Time2Date
+  Time3 Time3Date Time4 Time4Date Time5 Time5Date Time6 Time6Date Time7 Time7Date Time8 Time8Date Time9 Time9Date Time10 Time10Date outOfTheatre
+  anaesthesiaEnd surgeryEnd recoveryStart ActualOp
+
+| eval SurgeryStartDerived=coalesce(anaesthesiaBegin,surgeryBegin,patientArrival)
+| eval SurgeryEndDerived = coalesce(outOfTheatre,anaesthesiaEnd,surgeryEnd,recoveryStart)     
+ 
+
+| table indextime _time OperationDate Surgeon OperationRoom  AccountNumber  Time1 Time1Date Time2 Time2Date Time3 Time3Date Time4 Time4Date Time5 
+        Time5Date Time6 Time6Date Time7 Time7Date Time8 Time8Date Time9 Time9Date Time10 Time10Date SurgeryStartDerived SurgeryEndDerived SurgeryStartTimeInHM 
+        SurgeryEndTimeInHM ActualOp 
+        
+
+
+| stats latest(SurgeryStartDerived) as SurgeryStartDerived    latest(SurgeryEndDerived) as SurgeryEndDerived   by OperationDate Surgeon OperationRoom  AccountNumber  ActualOp 
+| table  OperationDate Surgeon OperationRoom  AccountNumber  ActualOp indextime _time SurgeryStartDerived  SurgeryEndDerived
+| eval SurgeryStartTimeInHM=strftime(SurgeryStartDerived,"%H:%M")
+| eval SurgeryEndTimeInHM=strftime(SurgeryEndDerived,"%H:%M")
+| eval TotalSurgeryMinutes=round((SurgeryEndDerived-SurgeryStartDerived)/60,0)  
+| dedup OperationDate Surgeon OperationRoom  AccountNumber SurgeryStartTimeInHM SurgeryEndTimeInHM  sortby -indextime 
+| dedup OperationDate Surgeon OperationRoom  AccountNumber SurgeryStartTimeInHM sortby -indextime 
+| dedup OperationDate Surgeon OperationRoom  AccountNumber SurgeryEndTimeInHM  sortby -indextime
+| table  _time OperationDate Surgeon OperationRoom  AccountNumber ActualOp SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutes
+
+| eval tnow = now() 
+| eval OperationDateEpoch0=OperationDate." "."00:00:00"
+| eval OperationDateEpoch=strptime(OperationDateEpoch0,"%Y%m%d %H:%M")
+| eval dayofweekasnumber=strftime(OperationDateEpoch,"%w")        
+| eval WeekDay = strftime(OperationDateEpoch,"%a")        
+| eval MonthName = strftime(OperationDateEpoch,"%b")         
+| eval reportrun=strftime(tnow,"%Y-%m-%d %H:%M")        
+| eval WeekNumber = strftime(OperationDateEpoch,"%V") 
+| eval YearNumber = substr(OperationDate, 1, 4) 
+| eval _time=OperationDateEpoch0
+| eval  GroupedTheatreNames = 
+case
+( OperationRoom ="DS 1A" OR OperationRoom ="MITU TH1","MITU TH1/DS 1A" ,
+  OperationRoom ="DS 2A" OR OperationRoom ="MITU TH2","MITU TH2/DS 2A" ,
+  OperationRoom ="MINOPSA" OR OperationRoom ="MITU TR1","MITU TR1/MINOPSA",
+  OperationRoom ="THEATRE 8" OR OperationRoom ="THEATRE HYB","THEATRE HYB/THEATRE 8",
+  
+  OperationRoom !="THEATRE 8" AND OperationRoom !="THEATRE HYB" 
+  AND OperationRoom !="DS 1A" AND OperationRoom !="MITU TH1"
+  AND OperationRoom !="DS 2A" AND OperationRoom !="MITU TH2"
+  AND OperationRoom !="MINOPSA" AND OperationRoom !="MITU TR1",OperationRoom
+   )
+
+| table _time OperationDate WeekDay WeekNumber MonthName YearNumber Surgeon GroupedTheatreNames OperationRoom AccountNumber ActualOp SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutes 
+
+| join type=left Surgeon
+[search 
+sourcetype=ipeople:dbx:mis:drs 
+| table Mnemonic FirstName LastName  Name Service Specialty 
+| dedup Mnemonic FirstName LastName  Name Service Specialty | sort Mnemonic
+| rename Mnemonic as Surgeon
+]
+| table _time OperationDate WeekDay WeekNumber MonthName YearNumber Surgeon FirstName LastName  Name Service Specialty  GroupedTheatreNames OperationRoom AccountNumber ActualOp SurgeryStartTimeInHM SurgeryEndTimeInHM TotalSurgeryMinutes 
+| fillnull
+| search TotalSurgeryMinutes >0
+
+| eval WorkingMinutes = 
+          case(
+		  
+		       (OperationRoom IN ("THEATRE 2","THEATRE 5","THEATRE 7")           
+				AND
+				YearNumber IN ("2019")
+				AND
+				WeekNumber IN("01","16","17","19","22","35")
+				), "3600",
+				(OperationRoom IN ("THEATRE 2","THEATRE 5","THEATRE 7")                    
+				AND
+				YearNumber IN ("2019")
+				AND
+				WeekNumber IN("52")
+				), "2880",
+				
+			    (OperationRoom IN ("THEATRE 2","THEATRE 5","THEATRE 7")                    
+				AND
+				YearNumber IN ("2019")
+				AND
+				WeekNumber IN("02","03","04","05","06","07","08","09","10","11","12","13","14","15","18","20","21","23","24","25","26","27","28",
+				              "29","30","31","32","33","34","36","37","38","39","40","41","42","43","44","45","46","47","48","49","50","51"
+							  )
+				  ),"4320",
+				  				  
+				
+				(OperationRoom IN ("DS 1A","THEATRE 1","THEATRE 6","THEATRE 3","DS 2A","THEATRE 8","MINOPSA", "THEATRE 4", "THEATRE HYB","MITU TH2","MITU TH1","MITU TR1")           
+				AND
+				YearNumber IN ("2019")
+				AND
+				WeekNumber IN("01","16","17","19","22","35")
+				), "2880",
+				
+				(OperationRoom IN ("DS 1A","THEATRE 1","THEATRE 6","THEATRE 3","DS 2A","THEATRE 8","MINOPSA", "THEATRE 4", "THEATRE HYB","MITU TH2","MITU TH1","MITU TR1")           
+				AND
+				YearNumber IN ("2019")
+				AND
+				WeekNumber IN("52")
+				), "2160",
+				
+				(OperationRoom IN ("DS 1A","THEATRE 1","THEATRE 6","THEATRE 3","DS 2A","THEATRE 8","MINOPSA", "THEATRE 4", "THEATRE HYB","MITU TH2","MITU TH1","MITU TR1")                   
+				AND
+				YearNumber IN ("2019")
+				AND
+				WeekNumber IN("02","03","04","05","06","07","08","09","10","11","12","13","14","15","18","20","21","23","24","25","26","27","28",
+				              "29","30","31","32","33","34","36","37","38","39","40","41","42","43","44","45","46","47","48","49","50","51"
+							  )
+				  ),"3600",		
+				
+				
+				 1<2,"Data_not_yet_Calculated" 	  
+		  ) | fillnull
