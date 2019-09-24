@@ -1,0 +1,39 @@
+index=meditech  OperationDate > 20181231 OperationRoom IN ( "DS 1A","THEATRE 1","THEATRE 2","THEATRE 5","THEATRE 7","THEATRE 6","THEATRE 3","DS 2A","THEATRE 8","MINOPSA",								
+                    "THEATRE 4", "THEATRE HYB","MITU TH2","MITU TH1","MITU TR1"								
+                    )                    								
+| eval indextime=strftime(_indextime,"%Y-%m-%d %H:%M:%S") 								
+| sort 0 - _indextime 								
+| dedup  Surgeon 
+| table Surgeon
+| lookup clinician_lookup.csv Mnemonic AS Surgeon                                                                     
+ OUTPUT Speciality AS SpecialtyCode FirstName AS surgeonFirstName LastName AS surgeonLastName Title AS surgeonTitle DrType as Service Name as SurgeonName
+ | sort Surgeon
+ | table Surgeon SurgeonName
+ | join type=left Surgeon
+[ | inputlookup Dev_DynamictableAllallocationwithDNR.csv 
+| search ProcCode=0
+| table _time pkey DrCode Date WeekNumber YearNumber TheatreRoomCode FromTime ToTime AllocationMinutes
+|search earliest=@mon latest=now
+ 
+| lookup clinician_lookup Mnemonic as DrCode OUTPUT DrType AS Code
+| lookup surgicalCodes Code AS Code OUTPUT Description AS surgeonSpecialtyName Colour AS category
+| eval  GroupedTheatreNames = 
+case
+( TheatreRoomCode ="DS 1A" OR TheatreRoomCode ="MITU TH1","MITU TH1/DS 1A" ,
+  TheatreRoomCode ="DS 2A" OR TheatreRoomCode ="MITU TH2","MITU TH2/DS 2A" ,
+  TheatreRoomCode ="MINOPSA" OR TheatreRoomCode ="MITU TR1","MITU TR1/MINOPSA",
+  TheatreRoomCode ="THEATRE 8" OR TheatreRoomCode ="THEATRE HYB","THEATRE HYB/THEATRE 8",
+  
+  TheatreRoomCode !="THEATRE 8" AND TheatreRoomCode !="THEATRE HYB" 
+  AND TheatreRoomCode !="DS 1A" AND TheatreRoomCode !="MITU TH1"
+  AND TheatreRoomCode !="DS 2A" AND TheatreRoomCode !="MITU TH2"
+  AND TheatreRoomCode !="MINOPSA" AND TheatreRoomCode !="MITU TR1",TheatreRoomCode
+   )  
+| table Date GroupedTheatreNames DrCode FromTime ToTime AllocationMinutes
+| eval pkey=Date.DrCode
+| table pkey Date GroupedTheatreNames DrCode FromTime ToTime AllocationMinutes | stats count(pkey) as NumberOfAllocation by DrCode | rename DrCode as Surgeon 
+| table Surgeon NumberOfAllocation
+]
+| table Surgeon SurgeonName NumberOfAllocation
+| fillnull
+| table Surgeon SurgeonName NumberOfAllocation
