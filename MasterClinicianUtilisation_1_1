@@ -1,0 +1,11 @@
+index=meditech  OperationDate > 20181231 OperationRoom IN ( "DS 1A","THEATRE 1","THEATRE 2","THEATRE 5","THEATRE 7","THEATRE 6","THEATRE 3","DS 2A","THEATRE 8","MINOPSA",								
+                    "THEATRE 4", "THEATRE HYB","MITU TH2","MITU TH1","MITU TR1"								
+                    )                    								
+| eval indextime=strftime(_indextime,"%Y-%m-%d %H:%M:%S") 								
+| sort 0 - _indextime 								
+| dedup  Surgeon 
+| table Surgeon
+| lookup clinician_lookup.csv Mnemonic AS Surgeon                                                                     
+ OUTPUT Speciality AS SpecialtyCode FirstName AS surgeonFirstName LastName AS surgeonLastName Title AS surgeonTitle DrType as Service Name as SurgeonName
+ | sort Surgeon
+ | table Surgeon SurgeonName
